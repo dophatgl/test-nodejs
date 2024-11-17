@@ -1,28 +1,25 @@
 import asyncio
-import cloudscraper
-import requests
+import logging
 import time
 import uuid
+
+import cloudscraper
+import requests
 from loguru import logger
-import sys
-import logging
+
 logging.disable(logging.ERROR)
 
 
-PING_INTERVAL = 180  
-RETRIES = 120  
-TOKEN_FILE = 'data.txt'  
+PING_INTERVAL = 180
+RETRIES = 120
+TOKEN_FILE = "data.txt"
 
 DOMAIN_API = {
     "SESSION": "https://api.nodepay.org/api/auth/session?",
-    "PING": "https://nw.nodepay.org/api/network/ping"
+    "PING": "https://nw.nodepay.org/api/network/ping",
 }
 
-CONNECTION_STATES = {
-    "CONNECTED": 1,
-    "DISCONNECTED": 2,
-    "NONE_CONNECTION": 3
-}
+CONNECTION_STATES = {"CONNECTED": 1, "DISCONNECTED": 2, "NONE_CONNECTION": 3}
 
 status_connect = CONNECTION_STATES["NONE_CONNECTION"]
 browser_id = None
@@ -51,7 +48,7 @@ async def render_profile_info(proxy, token):
             response = await call_api(DOMAIN_API["SESSION"], {}, proxy, token)
             if response is None:
                 logger.info(f"Skipping proxy {proxy} due to 403 error.")
-                return  
+                return
             valid_resp(response)
             account_info = response["data"]
             if account_info.get("uid"):
@@ -73,40 +70,46 @@ async def call_api(url, data, proxy, token, max_retries=3):
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36",
         "Accept": "application/json",
         "Accept-Language": "en-US,en;q=0.5",
-        "Referer": "https://app.nodepay.ai"
+        "Referer": "https://app.nodepay.ai",
     }
 
     for attempt in range(max_retries):
         try:
             loop = asyncio.get_running_loop()
-            response_json = await loop.run_in_executor(None, make_request, url, data, headers, proxy)
+            response_json = await loop.run_in_executor(
+                None, make_request, url, data, headers, proxy
+            )
+            print(f"url: {url}, response_json: {response_json}")
             return valid_resp(response_json)
         except requests.exceptions.HTTPError as e:
-            logger.error(f"HTTP error on attempt {attempt + 1} for proxy {proxy}: {e}")
+            logger.error(f"HTTP error on attempt {
+                         attempt + 1} for proxy {proxy}: {e}")
             if e.response.status_code == 403:
-                logger.error(f"403 Forbidden encountered on attempt {attempt + 1}: {e}")
-                return None  
+                logger.error(f"403 Forbidden encountered on attempt {
+                             attempt + 1}: {e}")
+                return None
         except requests.exceptions.ConnectionError as e:
-            logger.error(f"Connection error on attempt {attempt + 1} for proxy {proxy}: {e}")
+            logger.error(f"Connection error on attempt {
+                         attempt + 1} for proxy {proxy}: {e}")
         except requests.exceptions.Timeout as e:
-            logger.error(f"Timeout on attempt {attempt + 1} for proxy {proxy}: {e}")
+            logger.error(f"Timeout on attempt {
+                         attempt + 1} for proxy {proxy}: {e}")
         except Exception as e:
-            logger.error(f"Unexpected error on attempt {attempt + 1} for proxy {proxy}: {e}")
+            logger.error(f"Unexpected error on attempt {
+                         attempt + 1} for proxy {proxy}: {e}")
 
-        await asyncio.sleep(2 ** attempt) 
+        await asyncio.sleep(2**attempt)
 
-    logger.error(f"Failed API call to {url} after {max_retries} attempts with proxy {proxy}")
+    logger.error(f"Failed API call to {url} after {
+                 max_retries} attempts with proxy {proxy}")
     return None
 
 
 def make_request(url, data, headers, proxy):
     scraper = cloudscraper.create_scraper()
-    if proxy:
-        proxies = {
-            'http': proxy,
-            'https': proxy
-        }
-        scraper.proxies.update(proxies)
+    # if proxy:
+    #     proxies = {"http": proxy, "https": proxy}
+    #     scraper.proxies.update(proxies)
 
     response = scraper.post(url, json=data, headers=headers, timeout=10)
     response.raise_for_status()
@@ -128,8 +131,12 @@ async def ping(proxy, token):
     global last_ping_time, RETRIES, status_connect
 
     current_time = time.time()
-    if proxy in last_ping_time and (current_time - last_ping_time[proxy]) < PING_INTERVAL:
-        logger.info(f"Skipping ping for proxy {proxy}, not enough time elapsed")
+    if (
+        proxy in last_ping_time
+        and (current_time - last_ping_time[proxy]) < PING_INTERVAL
+    ):
+        logger.info(f"Skipping ping for proxy {
+                    proxy}, not enough time elapsed")
         return
 
     last_ping_time[proxy] = current_time
@@ -138,7 +145,7 @@ async def ping(proxy, token):
         data = {
             "id": account_info.get("uid"),
             "browser_id": browser_id,
-            "timestamp": int(time.time())
+            "timestamp": int(time.time()),
         }
 
         response = await call_api(DOMAIN_API["PING"], data, proxy, token)
@@ -176,7 +183,7 @@ def handle_logout(proxy):
 
 def load_proxies(proxy_file):
     try:
-        with open(proxy_file, 'r') as file:
+        with open(proxy_file, "r") as file:
             proxies = file.read().splitlines()
         return proxies
     except Exception as e:
@@ -189,10 +196,7 @@ def save_status(proxy, status):
 
 
 def save_session_info(proxy, data):
-    data_to_save = {
-        "uid": data.get("uid"),
-        "browser_id": browser_id
-    }
+    data_to_save = {"uid": data.get("uid"), "browser_id": browser_id}
     pass
 
 
@@ -210,7 +214,7 @@ def remove_proxy_from_list(proxy):
 
 def load_tokens_from_file(filename):
     try:
-        with open(filename, 'r') as file:
+        with open(filename, "r") as file:
             tokens = file.read().splitlines()
         return tokens
     except Exception as e:
@@ -219,11 +223,11 @@ def load_tokens_from_file(filename):
 
 
 async def send_data_to_server(url, data, token):
-    proxy = None  
+    proxy = None
     response = await call_api(url, data, proxy, token)
 
     if response is not None:
-        logger.info(f"Gửi yêu cầu đăng nhập")
+        logger.info("Gửi yêu cầu đăng nhập")
     else:
         logger.error("Không nhận được phản hồi.")
 
@@ -232,14 +236,16 @@ async def main():
     print("Ai sợ thì đi về!")
 
     url = "https://api.nodepay.org/api/auth/session?"
+    jls_extract_var = "origin,access-control-request-method\
+    ,access-control-request-headers,accept-encoding"
     data = {
         "cache-control": "no-cache, no-store, max-age=0, must-revalidate",
         "cf-cache-status": "DYNAMIC",
         "cf-ray": "8db8aaa27b6fd487-NRT",
-        "ary": "origin,access-control-request-method,access-control-request-headers,accept-encoding",
+        "ary": jls_extract_var,
     }
 
-    all_proxies = load_proxies('proxy.txt')
+    all_proxies = load_proxies("proxy.txt")
     tokens = load_tokens_from_file(TOKEN_FILE)
 
     for token in tokens:
@@ -248,20 +254,30 @@ async def main():
 
     while True:
         for token in tokens:
-            active_proxies = [proxy for proxy in all_proxies if is_valid_proxy(proxy)][:100]
-            tasks = {asyncio.create_task(render_profile_info(proxy, token)): proxy for proxy in active_proxies}
+            active_proxies = [proxy for proxy in all_proxies if is_valid_proxy(proxy)][
+                :100
+            ]
+            tasks = {
+                asyncio.create_task(render_profile_info(proxy, token)): proxy
+                for proxy in active_proxies
+            }
 
-            done, pending = await asyncio.wait(tasks.keys(), return_when=asyncio.FIRST_COMPLETED)
+            done, _ = await asyncio.wait(
+                tasks.keys(), return_when=asyncio.FIRST_COMPLETED
+            )
             for task in done:
                 failed_proxy = tasks[task]
                 if task.result() is None:
-                    logger.info(f"Loại bỏ và thay thế proxy bị lỗi: {failed_proxy}")
+                    logger.info(f"Loại bỏ và thay thế proxy bị lỗi: {
+                                failed_proxy}")
                     active_proxies.remove(failed_proxy)
                     if all_proxies:
                         new_proxy = all_proxies.pop(0)
                         if is_valid_proxy(new_proxy):
                             active_proxies.append(new_proxy)
-                            new_task = asyncio.create_task(render_profile_info(new_proxy, token))
+                            new_task = asyncio.create_task(
+                                render_profile_info(new_proxy, token)
+                            )
                             tasks[new_task] = new_proxy
                 tasks.pop(task)
 
@@ -273,7 +289,7 @@ async def main():
         await asyncio.sleep(10)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
